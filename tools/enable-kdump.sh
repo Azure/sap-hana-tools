@@ -74,6 +74,9 @@ fi
 
 #lun_dev_mapper="/dev/mapper/$id"
 lun_dev_mapper="/dev/disk/by-id/scsi-$id"
+if [[ -z "$lun_dev_mapper" ]]; then
+    ExitIfLunNotFound
+fi
 
 # format a disk
 mkfs.xfs -f $lun_dev_mapper

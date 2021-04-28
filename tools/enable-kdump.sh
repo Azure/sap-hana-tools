@@ -72,7 +72,8 @@ if [[ "$id" == "" ]]; then
     ExitIfLunNotFound
 fi
 
-lun_dev_mapper="/dev/mapper/$id"
+#lun_dev_mapper="/dev/mapper/$id"
+lun_dev_mapper="/dev/disk/by-id/scsi-$id"
 
 # format a disk
 mkfs.xfs -f $lun_dev_mapper
@@ -120,7 +121,7 @@ ExitIfFailed $? "kxec-tools required to enable kdump, please install"
 egrep "^GRUB_CMDLINE_LINUX_DEFAULT" /etc/default/grub
 if [[ "$?" == "1" ]]; then # in this case append the parameter to the file
     echo "GRUB_CMDLINE_LINUX_DEFAULT=\"\"" >> /etc/default/grub
-    ExitIfFailed $? "Enable to add GRUB_CMDLINE_LINUX_DEFAULT parameter in /etc/default/grub"
+    ExitIfFailed $? "Unable to add GRUB_CMDLINE_LINUX_DEFAULT parameter in /etc/default/grub"
 fi
 
 AddNumaSettingInKdumpConfFile()

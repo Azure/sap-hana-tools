@@ -114,7 +114,7 @@ ExitIfFailed $? "Unable to format kdump dedicated lun"
 
 # add entry in the /etc/fstab to mount the kdump lun
 # on reboot
-if [[ $(grep "$lun_dev_mapper /var/crash xfs defaults 0 0" /etc/fstab) != "" ]]; then
+if [[ $(grep "$lun_dev_mapper /var/crash xfs defaults 0 0" /etc/fstab) = "" ]]; then
 echo "$lun_dev_mapper /var/crash xfs defaults 0 0" >> /etc/fstab
 ExitIfFailed $? "Unable to add lun mount entry in /etc/fstab"
 fi

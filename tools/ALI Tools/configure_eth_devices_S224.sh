@@ -41,7 +41,7 @@ for DEVICE in $ETH_DEVICES; do
   CONNECTION_NAME="$DEVICE"
 
   # Create a new connection for the device
-  nmcli connection add type ethernet ifname "$DEVICE" con-name "$CONNECTION_NAME" master "$CURRENT_BOND" slave yes
+  nmcli connection add type ethernet ifname "$DEVICE" con-name "$CONNECTION_NAME" master "$CURRENT_BOND"
 
   # Fetch the UUID of the newly created connection
   CONNECTION_UUID=$(nmcli -t -f NAME,UUID connection show | grep "^$CONNECTION_NAME" | cut -d: -f2)

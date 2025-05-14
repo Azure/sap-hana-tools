@@ -1,6 +1,9 @@
-### This SCript works in the assumption that the bond0 and bond 1 is configured along with the client and backup vlan for Mt Sinai setup
-
 #!/bin/bash
+
+#Taking backup
+mkdir /root/confignetworkbackup/
+cp /etc/sysconfig/network-scripts/* /root/confignetworkbackup/
+echo "The network files are backedup successfully"
 
 # Define bond details
 BONDS=("bond0" "bond1")
@@ -18,60 +21,78 @@ for BOND in "${BONDS[@]}"; do
 done
 
 # Fetch eligible Ethernet devices
-ETH_DEVICES=$(ip link | grep -i mtu | grep -v "NO-CARRIER" | cut -d: -f2 | grep -v bond | grep -v vlan | grep -v lo | awk '{$1=$1;print}')
+ETH_DEVICES=($(ip link | grep -i mtu | grep -v "NO-CARRIER" | cut -d: -f2 | grep -v bond | grep -v vlan | grep -v lo | awk '{$1=$1;print}'))
 
-if [[ -z "$ETH_DEVICES" ]]; then
-  echo "No eligible Ethernet devices found. Exiting."
+if [[ ${#ETH_DEVICES[@]} -lt 4 ]]; then
+  echo "Error: At least 4 eligible Ethernet devices are required. Found ${#ETH_DEVICES[@]}. Exiting."
   exit 1
 fi
 
-echo "Found Ethernet devices: $ETH_DEVICES"
+echo "Found Ethernet devices: ${ETH_DEVICES[*]}"
 
-# Allocate devices to bonds alternately
-BOND_INDEX=0
-for DEVICE in $ETH_DEVICES; do
-  # Trim whitespace from device name
-  DEVICE=$(echo "$DEVICE" | xargs)
+# Define device to bond mapping
+DEVICE_TO_BOND=("bond0" "bond1" "bond1" "bond0")
 
-  # Select the current bond
-  CURRENT_BOND=${BONDS[$BOND_INDEX]}
-  CURRENT_BOND_UUID=${BOND_UUIDS[$CURRENT_BOND]}
-
-  # Generate a unique connection name
+# Loop through first 4 devices and assign according to the mapping
+for i in {0..3}; do
+  DEVICE="${ETH_DEVICES[$i]}"
+  EXPECTED_BOND="${DEVICE_TO_BOND[$i]}"
+  EXPECTED_BOND_UUID="${BOND_UUIDS[$EXPECTED_BOND]}"
   CONNECTION_NAME="$DEVICE"
 
-  # Create a new connection for the device
-  nmcli connection add type ethernet ifname "$DEVICE" con-name "$CONNECTION_NAME" master "$CURRENT_BOND"
+  # Find current connection (if exists)
+  EXISTING_CON=$(nmcli -t -f DEVICE,NAME connection show --active | grep "^$DEVICE:" | cut -d: -f2)
 
-  # Fetch the UUID of the newly created connection
-  CONNECTION_UUID=$(nmcli -t -f NAME,UUID connection show | grep "^$CONNECTION_NAME" | cut -d: -f2)
+  # Get current master bond
+  CURRENT_MASTER=$(nmcli -g connection.master connection show "$EXISTING_CON" 2>/dev/null)
 
-  # Verify if connection was created successfully
-  if [[ -z "$CONNECTION_UUID" ]]; then
-    echo "Error: Failed to create connection for device $DEVICE. Skipping."
+  if [[ "$CURRENT_MASTER" == "$EXPECTED_BOND" ]]; then
+    echo "Device $DEVICE is already correctly assigned to $EXPECTED_BOND. Skipping."
     continue
   fi
 
-  echo "Created connection for $DEVICE with UUID $CONNECTION_UUID, assigned to $CURRENT_BOND."
+  echo "Device $DEVICE is NOT assigned to $EXPECTED_BOND. Reconfiguring..."
 
-  # Update the ifcfg file with the required entries
+  # Delete existing connection if it exists
+  if [[ -n "$EXISTING_CON" ]]; then
+    echo "Deleting existing connection $EXISTING_CON for $DEVICE."
+    nmcli connection delete "$EXISTING_CON"
+  fi
+
+  # Backup ifcfg file if exists
   IFCFG_FILE="/etc/sysconfig/network-scripts/ifcfg-$DEVICE"
+  if [[ -f "$IFCFG_FILE" ]]; then
+    BACKUP_FILE="${IFCFG_FILE}.bak_$(date +%Y%m%d_%H%M%S)"
+    echo "Backing up $IFCFG_FILE to $BACKUP_FILE"
+    cp "$IFCFG_FILE" "$BACKUP_FILE"
+  fi
+
+  # Create new slave connection
+  nmcli connection add type ethernet ifname "$DEVICE" con-name "$CONNECTION_NAME" master "$EXPECTED_BOND"
+
+  # Get the new UUID
+  CONNECTION_UUID=$(nmcli -t -f NAME,UUID connection show | grep "^$CONNECTION_NAME" | cut -d: -f2)
+
+  if [[ -z "$CONNECTION_UUID" ]]; then
+    echo "Error: Failed to create connection for $DEVICE. Skipping."
+    continue
+  fi
+
+  echo "Created connection for $DEVICE with UUID $CONNECTION_UUID, assigned to $EXPECTED_BOND."
+
+  # Write new ifcfg file
   cat > "$IFCFG_FILE" << EOF
-MTU=9000
 TYPE=Ethernet
 NAME=$CONNECTION_NAME
 UUID=$CONNECTION_UUID
 DEVICE=$DEVICE
 ONBOOT=yes
-MASTER_UUID=$CURRENT_BOND_UUID
-MASTER=$CURRENT_BOND
+MASTER_UUID=$EXPECTED_BOND_UUID
+MASTER=$EXPECTED_BOND
 SLAVE=yes
 EOF
 
   echo "Configuration written to $IFCFG_FILE."
-
-  # Toggle the bond index to alternate bonds
-  BOND_INDEX=$(( (BOND_INDEX + 1) % ${#BONDS[@]} ))
 done
 
-echo "All devices processed and assigned alternately to bonds."
+echo "Device bonding verification, correction, and backups completed."

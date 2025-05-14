@@ -4,7 +4,6 @@
 mkdir /root/confignetworkbackup/
 cp /etc/sysconfig/network-scripts/* /root/confignetworkbackup/
 echo "The network files are backedup successfully"
-
 # Define bond details
 BONDS=("bond0" "bond1")
 
@@ -21,7 +20,8 @@ for BOND in "${BONDS[@]}"; do
 done
 
 # Fetch eligible Ethernet devices
-ETH_DEVICES=($(ip link | grep -i mtu | grep -v "NO-CARRIER" | cut -d: -f2 | grep -v bond | grep -v vlan | grep -v lo | awk '{$1=$1;print}'))
+ETH_DEVICES=($(ip link | grep -i mtu | grep -v "NO-CARRIER" | cut -d: -f2 | grep -v bond | grep -v vlan | grep -v lo | grep -v enp1s | grep -v enp2s | awk '{$1=$1;print}'))
+
 
 if [[ ${#ETH_DEVICES[@]} -lt 4 ]]; then
   echo "Error: At least 4 eligible Ethernet devices are required. Found ${#ETH_DEVICES[@]}. Exiting."
@@ -45,8 +45,8 @@ for i in {0..3}; do
 
   # Get current master bond
   CURRENT_MASTER=$(nmcli -g connection.master connection show "$EXISTING_CON" 2>/dev/null)
-
-  if [[ "$CURRENT_MASTER" == "$EXPECTED_BOND" ]]; then
+  # echo "$CURRENT_MASTER"  "$EXPECTED_BOND"
+  if [[ "$CURRENT_MASTER" == "$EXPECTED_BOND_UUID" ]]; then
     echo "Device $DEVICE is already correctly assigned to $EXPECTED_BOND. Skipping."
     continue
   fi
